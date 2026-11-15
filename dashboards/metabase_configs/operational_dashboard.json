@@ -1,0 +1,157 @@
+{
+  "name": "Operational Dashboard",
+  "description": "Pipeline health, data quality, and operational metrics",
+  "dashboard_cards": [
+    {
+      "name": "Pipeline Health Score",
+      "card_type": "gauge",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT 100.0 * SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) / COUNT(*) as health_score FROM analytics._pipeline_log WHERE start_time >= CURRENT_DATE - INTERVAL '7 days'"
+        }
+      },
+      "visualization_settings": {
+        "gauge.segments": [
+          {"min": 0, "max": 70, "color": "#EF4444"},
+          {"min": 70, "max": 90, "color": "#F59E0B"},
+          {"min": 90, "max": 100, "color": "#10B981"}
+        ]
+      },
+      "position": {"row": 0, "col": 0, "sizeX": 4, "sizeY": 4}
+    },
+    {
+      "name": "Data Quality Score",
+      "card_type": "gauge",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT 100.0 * SUM(CASE WHEN passed THEN 1 ELSE 0 END) / COUNT(*) as dq_score FROM analytics._data_quality_log WHERE run_timestamp >= CURRENT_DATE - INTERVAL '1 day'"
+        }
+      },
+      "visualization_settings": {
+        "gauge.segments": [
+          {"min": 0, "max": 80, "color": "#EF4444"},
+          {"min": 80, "max": 95, "color": "#F59E0B"},
+          {"min": 95, "max": 100, "color": "#10B981"}
+        ]
+      },
+      "position": {"row": 0, "col": 4, "sizeX": 4, "sizeY": 4}
+    },
+    {
+      "name": "Total Rows Processed Today",
+      "card_type": "scalar",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT COALESCE(SUM(rows_processed), 0) as total_rows FROM analytics._pipeline_log WHERE start_time::DATE = CURRENT_DATE"
+        }
+      },
+      "visualization_settings": {
+        "number.style": "decimal"
+      },
+      "position": {"row": 0, "col": 8, "sizeX": 4, "sizeY": 4}
+    },
+    {
+      "name": "Pipeline Failures (24h)",
+      "card_type": "scalar",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT COUNT(*) as failures FROM analytics._pipeline_log WHERE status = 'failed' AND start_time >= CURRENT_TIMESTAMP - INTERVAL '24 hours'"
+        }
+      },
+      "visualization_settings": {
+        "number.style": "decimal"
+      },
+      "position": {"row": 0, "col": 12, "sizeX": 4, "sizeY": 4}
+    },
+    {
+      "name": "Pipeline Execution History",
+      "card_type": "table",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT dag_id, dag_run_id, start_time, end_time, duration_seconds, status, rows_processed, COALESCE(error_message, '-') as error FROM analytics._pipeline_log WHERE start_time >= CURRENT_DATE - INTERVAL '7 days' ORDER BY start_time DESC LIMIT 50"
+        }
+      },
+      "visualization_settings": {
+        "table.pivot": false,
+        "column_settings": {
+          "status": {
+            "conditionalFormatting": [
+              {"operator": "=", "value": "success", "color": "#10B981"},
+              {"operator": "=", "value": "failed", "color": "#EF4444"}
+            ]
+          }
+        }
+      },
+      "position": {"row": 4, "col": 0, "sizeX": 16, "sizeY": 8}
+    },
+    {
+      "name": "Data Quality Check Results",
+      "card_type": "bar",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT dataset_name, SUM(CASE WHEN passed THEN 1 ELSE 0 END) as passed_checks, SUM(CASE WHEN NOT passed THEN 1 ELSE 0 END) as failed_checks FROM analytics._data_quality_log WHERE run_timestamp >= CURRENT_DATE - INTERVAL '7 days' GROUP BY dataset_name ORDER BY dataset_name"
+        }
+      },
+      "visualization_settings": {
+        "graph.dimensions": ["dataset_name"],
+        "graph.metrics": ["passed_checks", "failed_checks"],
+        "graph.colors": ["#10B981", "#EF4444"]
+      },
+      "position": {"row": 12, "col": 0, "sizeX": 8, "sizeY": 6}
+    },
+    {
+      "name": "Pipeline Duration Trend",
+      "card_type": "line",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT start_time::DATE as date, dag_id, AVG(duration_seconds) as avg_duration FROM analytics._pipeline_log WHERE start_time >= CURRENT_DATE - INTERVAL '14 days' AND status = 'success' GROUP BY start_time::DATE, dag_id ORDER BY date"
+        }
+      },
+      "visualization_settings": {
+        "graph.dimensions": ["date"],
+        "graph.metrics": ["avg_duration"],
+        "series_settings": {
+          "avg_duration": {"title": "Avg Duration (seconds)"}
+        }
+      },
+      "position": {"row": 12, "col": 8, "sizeX": 8, "sizeY": 6}
+    },
+    {
+      "name": "Data Freshness Status",
+      "card_type": "table",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT 'fact_transactions' as table_name, MAX(_loaded_at) as last_updated, EXTRACT(HOUR FROM CURRENT_TIMESTAMP - MAX(_loaded_at)) as hours_old FROM analytics.fact_transactions UNION ALL SELECT 'fact_customer_sessions', MAX(_loaded_at), EXTRACT(HOUR FROM CURRENT_TIMESTAMP - MAX(_loaded_at)) FROM analytics.fact_customer_sessions UNION ALL SELECT 'dim_customers', MAX(updated_at), EXTRACT(HOUR FROM CURRENT_TIMESTAMP - MAX(updated_at)) FROM analytics.dim_customers"
+        }
+      },
+      "visualization_settings": {
+        "table.pivot": false
+      },
+      "position": {"row": 18, "col": 0, "sizeX": 8, "sizeY": 5}
+    },
+    {
+      "name": "Recent DQ Issues",
+      "card_type": "table",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT run_timestamp, dataset_name, check_name, severity, message, affected_rows FROM analytics._data_quality_log WHERE NOT passed AND run_timestamp >= CURRENT_DATE - INTERVAL '7 days' ORDER BY run_timestamp DESC LIMIT 20"
+        }
+      },
+      "visualization_settings": {
+        "table.pivot": false
+      },
+      "position": {"row": 18, "col": 8, "sizeX": 8, "sizeY": 5}
+    }
+  ],
+  "parameters": [],
+  "refresh_interval": 300
+}
+

@@ -1,0 +1,149 @@
+{
+  "name": "Executive Dashboard",
+  "description": "High-level KPIs and business metrics for executive leadership",
+  "dashboard_cards": [
+    {
+      "name": "Total Revenue MTD",
+      "card_type": "scalar",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT SUM(total_amount_usd) as revenue FROM analytics.fact_transactions WHERE status = 'Completed' AND transaction_timestamp >= DATE_TRUNC('month', CURRENT_DATE)"
+        }
+      },
+      "visualization_settings": {
+        "number.style": "currency",
+        "number.currency": "USD"
+      },
+      "position": {"row": 0, "col": 0, "sizeX": 4, "sizeY": 3}
+    },
+    {
+      "name": "Total Customers",
+      "card_type": "scalar",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT COUNT(DISTINCT customer_sk) as customers FROM analytics.dim_customers WHERE is_current = TRUE"
+        }
+      },
+      "visualization_settings": {
+        "number.style": "decimal"
+      },
+      "position": {"row": 0, "col": 4, "sizeX": 4, "sizeY": 3}
+    },
+    {
+      "name": "Average Order Value",
+      "card_type": "scalar",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT AVG(total_amount_usd) as aov FROM analytics.fact_transactions WHERE status = 'Completed' AND transaction_timestamp >= DATE_TRUNC('month', CURRENT_DATE)"
+        }
+      },
+      "visualization_settings": {
+        "number.style": "currency",
+        "number.currency": "USD"
+      },
+      "position": {"row": 0, "col": 8, "sizeX": 4, "sizeY": 3}
+    },
+    {
+      "name": "Conversion Rate",
+      "card_type": "scalar",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT 100.0 * SUM(CASE WHEN conversion THEN 1 ELSE 0 END) / COUNT(*) as conversion_rate FROM analytics.fact_customer_sessions WHERE session_start >= DATE_TRUNC('month', CURRENT_DATE)"
+        }
+      },
+      "visualization_settings": {
+        "number.style": "percent"
+      },
+      "position": {"row": 0, "col": 12, "sizeX": 4, "sizeY": 3}
+    },
+    {
+      "name": "Revenue Trend - Daily",
+      "card_type": "line",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT dt.full_date as date, COALESCE(SUM(ft.total_amount_usd), 0) as revenue FROM analytics.dim_time dt LEFT JOIN analytics.fact_transactions ft ON dt.date_key = ft.date_key AND ft.status = 'Completed' WHERE dt.full_date >= CURRENT_DATE - INTERVAL '30 days' AND dt.full_date < CURRENT_DATE GROUP BY dt.full_date ORDER BY dt.full_date"
+        }
+      },
+      "visualization_settings": {
+        "graph.dimensions": ["date"],
+        "graph.metrics": ["revenue"],
+        "graph.x_axis.scale": "timeseries"
+      },
+      "position": {"row": 3, "col": 0, "sizeX": 8, "sizeY": 6}
+    },
+    {
+      "name": "Revenue by Channel",
+      "card_type": "pie",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT ch.channel_name, SUM(ft.total_amount_usd) as revenue FROM analytics.fact_transactions ft JOIN analytics.dim_channels ch ON ft.channel_sk = ch.channel_sk WHERE ft.status = 'Completed' AND ft.transaction_timestamp >= DATE_TRUNC('month', CURRENT_DATE) GROUP BY ch.channel_name ORDER BY revenue DESC"
+        }
+      },
+      "visualization_settings": {
+        "pie.show_legend": true,
+        "pie.show_total": true
+      },
+      "position": {"row": 3, "col": 8, "sizeX": 8, "sizeY": 6}
+    },
+    {
+      "name": "Customer Segment Performance",
+      "card_type": "bar",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT dc.customer_segment, COUNT(DISTINCT ft.customer_sk) as customers, SUM(ft.total_amount_usd) as revenue, AVG(ft.total_amount_usd) as avg_order_value FROM analytics.fact_transactions ft JOIN analytics.dim_customers dc ON ft.customer_sk = dc.customer_sk WHERE ft.status = 'Completed' AND dc.is_current = TRUE AND ft.transaction_timestamp >= DATE_TRUNC('month', CURRENT_DATE) GROUP BY dc.customer_segment ORDER BY revenue DESC"
+        }
+      },
+      "visualization_settings": {
+        "graph.dimensions": ["customer_segment"],
+        "graph.metrics": ["revenue", "customers"]
+      },
+      "position": {"row": 9, "col": 0, "sizeX": 8, "sizeY": 6}
+    },
+    {
+      "name": "Top Products by Revenue",
+      "card_type": "table",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT dp.product_name, dp.category, SUM(ft.quantity) as units_sold, SUM(ft.total_amount_usd) as revenue FROM analytics.fact_transactions ft JOIN analytics.dim_products dp ON ft.product_sk = dp.product_sk WHERE ft.status = 'Completed' AND dp.is_current = TRUE AND ft.transaction_timestamp >= DATE_TRUNC('month', CURRENT_DATE) GROUP BY dp.product_name, dp.category ORDER BY revenue DESC LIMIT 10"
+        }
+      },
+      "visualization_settings": {
+        "table.pivot": false
+      },
+      "position": {"row": 9, "col": 8, "sizeX": 8, "sizeY": 6}
+    },
+    {
+      "name": "YoY Growth Rate",
+      "card_type": "scalar",
+      "query": {
+        "type": "native",
+        "native": {
+          "query": "WITH current_period AS (SELECT SUM(total_amount_usd) as revenue FROM analytics.fact_transactions WHERE status = 'Completed' AND transaction_timestamp >= DATE_TRUNC('month', CURRENT_DATE)), prior_period AS (SELECT SUM(total_amount_usd) as revenue FROM analytics.fact_transactions WHERE status = 'Completed' AND transaction_timestamp >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '1 year' AND transaction_timestamp < DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '1 year' + INTERVAL '1 month') SELECT 100.0 * (c.revenue - p.revenue) / NULLIF(p.revenue, 0) as yoy_growth FROM current_period c, prior_period p"
+        }
+      },
+      "visualization_settings": {
+        "number.style": "percent",
+        "number.prefix": "",
+        "number.suffix": "%"
+      },
+      "position": {"row": 15, "col": 0, "sizeX": 4, "sizeY": 3}
+    }
+  ],
+  "parameters": [
+    {
+      "name": "Date Range",
+      "type": "date/range",
+      "default": "past30days"
+    }
+  ],
+  "refresh_interval": 3600
+}
+
